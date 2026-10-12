@@ -1,45 +1,72 @@
 # mifi_1s_python_final_project_karpov
 
-**ValutaTrade Hub** — итоговый проект по Python: консольное приложение,
-имитирующее работу валютного кошелька. Поддерживает регистрацию, вход,
-портфели, покупку/продажу валют и просмотр курсов.
+**ValutaTrade Hub** — консольный валютный кошелёк: регистрация и вход,
+портфель, покупка/продажа фиатных и криптовалют, курсы из внешних API.
+Покупка списывает USD, продажа начисляет USD.
 
-Для запуска нужны `uv` и Python 3.12. Из корня проекта выполните:
+## Структура
+
+```text
+valutatrade_hub/
+├── core/             # Модели, валюты, операции, исключения
+├── infra/            # Настройки и JSON-хранилище
+├── parser_service/   # API-клиенты и обновление курсов
+├── cli/              # Команды и вывод
+├── logging_config.py # JSON-логи и ротация
+└── decorators.py     # @log_action для buy/sell
+data/                # users.json, portfolios.json, rates.json, exchange_rates.json
+main.py              # Точка входа
+pyproject.toml       # Зависимости и настройки
+uv.lock              # Версии зависимостей
+Makefile             # Команды разработки
+```
+
+## Установка и запуск
+
+Требуются `uv` и Python 3.12. Команды выполняются из корня проекта:
 
 ```bash
 uv sync --locked
-export EXCHANGERATE_API_KEY="<ваш_ключ>"
+export EXCHANGERATE_API_KEY="<ключ ExchangeRate-API>"
 uv run --locked valutatrade
 ```
 
-В открывшейся сессии:
+Ключи хранятся в переменных окружения, а не в коде.
+
+## Команды CLI
 
 ```text
 register --username alice --password 1234
 login --username alice --password 1234
 update-rates
 show-rates --top 2
-show-portfolio
+show-rates --currency RUB --base EUR
+show-portfolio --base USD
+buy --currency BTC --amount 0.001
+sell --currency BTC --amount 0.0005
 get-rate --from USD --to BTC
-buy --currency BTC --amount 0.01
-sell --currency BTC --amount 0.005
+help
 exit
 ```
 
-Новый портфель пуст: для покупки нужен баланс USD в `data/portfolios.json`.
-Покупка списывает USD, продажа начисляет USD. Курсы берутся из API;
-кэш — `data/rates.json`, история — `data/exchange_rates.json`.
-TTL кэша — 5 минут; устаревшие курсы обновляются командой `update-rates`.
-Все команды: `help`.
+Новый портфель пуст; покупка требует USD-баланс в `data/portfolios.json`.
+Просмотр портфеля, покупка и продажа доступны после `login`.
 
-Настройки — секция `[tool.valutatrade]` в `pyproject.toml`.
-Логи сделок — `logs/actions.log` в формате JSON с ротацией по размеру.
-Логи парсера — `logs/parser.log`.
+## Кэш и Parser Service
 
-Команда `update-rates --source exchangerate` обновляет только фиатные курсы;
-`show-rates` поддерживает `--currency`, `--top` и `--base`.
-Периодическое обновление (интервал задаётся в `parser_service/config.py`):
+`data/rates.json` — кэш последних курсов, `data/exchange_rates.json` — история.
+TTL по умолчанию — 300 секунд; устаревший курс требует `update-rates`.
+Настройки Core — `[tool.valutatrade]` в `pyproject.toml`, парсера —
+`valutatrade_hub/parser_service/config.py`.
+
+Ручное обновление: `update-rates`; один источник:
+`update-rates --source coingecko` или `update-rates --source exchangerate`.
+Периодический запуск (интервал по умолчанию 300 секунд; остановка — Ctrl+C):
 
 ```bash
 uv run --locked python -m valutatrade_hub.parser_service.scheduler
 ```
+
+## Демонстрация
+
+[Полный цикл работы приложения — asciinema](https://asciinema.org/a/WL21F10HAlkVlN8Y).

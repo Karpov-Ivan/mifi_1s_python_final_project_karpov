@@ -238,9 +238,14 @@ class Portfolio:
         self,
         base_currency: str | None = None,
         *,
+        base: str | None = None,
         rate_service: RateService | None = None,
     ) -> float:
         """Конвертировать все кошельки в базовую валюту через единый сервис."""
+        if base is not None:
+            if base_currency is not None:
+                raise ValidationError("Укажите base или base_currency, а не оба сразу")
+            base_currency = base
         rates = rate_service or RateService()
         if base_currency is None:
             base_currency = rates.database.settings.get("DEFAULT_BASE_CURRENCY")
