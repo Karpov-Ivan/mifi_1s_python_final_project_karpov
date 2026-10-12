@@ -228,16 +228,22 @@ class Portfolio:
         code = validate_currency(currency_code)
         if code not in self._wallets:
             raise CurrencyNotFoundError(
-                f"У вас нет кошелька '{code}'. Добавьте валюту: "
-                "она создаётся автоматически при первой покупке."
+                code,
+                message=f"У вас нет кошелька '{code}'. Добавьте валюту: "
+                "она создаётся автоматически при первой покупке.",
             )
         return self._wallets[code]
 
     def get_total_value(
-        self, base_currency: str = "USD", *, rate_service: RateService | None = None
+        self,
+        base_currency: str | None = None,
+        *,
+        rate_service: RateService | None = None,
     ) -> float:
         """Конвертировать все кошельки в базовую валюту через единый сервис."""
         rates = rate_service or RateService()
+        if base_currency is None:
+            base_currency = rates.database.settings.get("DEFAULT_BASE_CURRENCY")
         base = rates.ensure_currency(base_currency)
         total = sum(
             wallet.balance * rates.get_rate(code, base).rate

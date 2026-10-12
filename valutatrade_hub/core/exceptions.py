@@ -26,9 +26,15 @@ class InsufficientFundsError(ValutaTradeError):
 class CurrencyNotFoundError(ValutaTradeError):
     """Неизвестная валюта или отсутствующий кошелёк."""
 
+    def __init__(self, code: str, *, message: str | None = None) -> None:
+        super().__init__(message or f"Неизвестная валюта '{code}'")
+
 
 class ApiRequestError(ValutaTradeError):
     """Курс недоступен в кэше и источнике курсов."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"Ошибка при обращении к внешнему API: {reason}")
 
 
 class DataStorageError(ValutaTradeError):

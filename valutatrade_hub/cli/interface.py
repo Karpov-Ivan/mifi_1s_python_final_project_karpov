@@ -6,7 +6,14 @@ import sys
 
 from prettytable import PrettyTable
 
-from valutatrade_hub.core.exceptions import ValidationError, ValutaTradeError
+from valutatrade_hub.core.currencies import CURRENCIES, get_currency
+from valutatrade_hub.core.exceptions import (
+    ApiRequestError,
+    CurrencyNotFoundError,
+    InsufficientFundsError,
+    ValidationError,
+    ValutaTradeError,
+)
 from valutatrade_hub.core.usecases import CoreService, PortfolioView, TradeResult
 from valutatrade_hub.core.utils import RateQuote
 
@@ -38,7 +45,7 @@ def build_parser() -> CommandParser:
         child.add_argument("--username", required=True)
         child.add_argument("--password", required=True)
     portfolio = commands.add_parser("show-portfolio", help="Портфель и балансы")
-    portfolio.add_argument("--base", default="USD")
+    portfolio.add_argument("--base")
     for command, description in (("buy", "Купить валюту"), ("sell", "Продать валюту")):
         child = commands.add_parser(command, help=description)
         child.add_argument("--currency", required=True)
@@ -86,6 +93,7 @@ class CommandInterface:
             f"{action} выполнена: {result.amount:.4f} {result.currency} "
             f"по курсу {result.quote.rate:.2f} USD/{result.currency}"
         )
+        print(get_currency(result.currency).get_display_info())
         print("Изменения в портфеле:")
         print(
             f"- {result.currency}: было {result.before:.4f} → стало {result.after:.4f}"
@@ -143,6 +151,17 @@ class CommandInterface:
                     self.running = False
         except HelpRequested:
             return True
+        except InsufficientFundsError as exc:
+            print(exc)
+            return False
+        except CurrencyNotFoundError as exc:
+            print(exc)
+            print("Поддерживаемые валюты: " + ", ".join(sorted(CURRENCIES)))
+            return False
+        except ApiRequestError as exc:
+            print(exc)
+            print("Повторите попытку позже или проверьте подключение к сети.")
+            return False
         except ValutaTradeError as exc:
             print(f"Ошибка: {exc}")
             return False
@@ -162,7 +181,11 @@ class CommandInterface:
 
 def main() -> None:
     """Запустить интерактивный CLI или выполнить команду из аргументов."""
-    interface = CommandInterface()
+    try:
+        interface = CommandInterface()
+    except ValutaTradeError as exc:
+        print(f"Ошибка: {exc}")
+        raise SystemExit(1) from exc
     if len(sys.argv) > 1:
         if not interface.execute(sys.argv[1:]):
             raise SystemExit(1)

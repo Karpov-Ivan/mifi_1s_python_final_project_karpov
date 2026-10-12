@@ -221,3 +221,6 @@ __marimo__/
 
 # Local assignment materials
 /tasks/
+
+# Application action logs and rotated copies
+/logs/

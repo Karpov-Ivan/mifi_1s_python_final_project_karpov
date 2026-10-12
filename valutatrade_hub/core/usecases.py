@@ -16,7 +16,10 @@ from valutatrade_hub.core.utils import (
     validate_number,
     validate_username,
 )
+from valutatrade_hub.decorators import log_action
 from valutatrade_hub.infra.database import DatabaseManager
+from valutatrade_hub.infra.settings import SettingsLoader
+from valutatrade_hub.logging_config import setup_logging
 
 
 @dataclass(frozen=True)
@@ -48,9 +51,12 @@ class CoreService:
     """Управлять пользователями, сессией, портфелями и сделками."""
 
     def __init__(self, database: DatabaseManager | None = None) -> None:
+        # Singleton обеспечивает общие настройки и JSON-хранилище всех операций.
+        self.settings = SettingsLoader()
         self.database = database or DatabaseManager()
         self.rates = RateService(self.database)
         self._current_user: User | None = None
+        setup_logging()
 
     def _users(self) -> list[User]:
         try:
@@ -123,13 +129,16 @@ class CoreService:
         self._current_user = user
         return user
 
-    def show_portfolio(self, base: str = "USD") -> PortfolioView:
+    def show_portfolio(self, base: str | None = None) -> PortfolioView:
         """Получить кошельки и общую стоимость в указанной валюте."""
         portfolio, _ = self._portfolio()
+        base = self.settings.get("DEFAULT_BASE_CURRENCY") if base is None else base
         try:
             base = self.rates.ensure_currency(base)
         except CurrencyNotFoundError as exc:
-            raise CurrencyNotFoundError(f"Неизвестная базовая валюта '{base}'") from exc
+            raise CurrencyNotFoundError(
+                base, message=f"Неизвестная базовая валюта '{base}'"
+            ) from exc
         rows = []
         sources = set()
         for code, wallet in sorted(portfolio.wallets.items()):
@@ -140,10 +149,12 @@ class CoreService:
         total = validate_number(sum(row[2] for row in rows), positive=False)
         return PortfolioView(portfolio.user.username, base, rows, total, tuple(sources))
 
+    @log_action("BUY", verbose=True)
     def buy(self, currency: str, amount: float) -> TradeResult:
         """Купить валюту за USD, автоматически создав целевой кошелёк."""
         return self._trade(currency, amount, buying=True)
 
+    @log_action("SELL", verbose=True)
     def sell(self, currency: str, amount: float) -> TradeResult:
         """Продать валюту и начислить выручку на USD-кошелёк."""
         return self._trade(currency, amount, buying=False)
@@ -163,6 +174,8 @@ class CoreService:
             after = validate_number(before + amount, positive=False)
             usd_after = usd_before - total
         else:
+            if code not in wallets:
+                raise InsufficientFundsError(0.0, amount, code)
             wallet = portfolio.get_wallet(code)
             if amount > wallet.balance:
                 raise InsufficientFundsError(wallet.balance, amount, code)
@@ -171,8 +184,13 @@ class CoreService:
         # Обмен USD на USD не меняет баланс, но требует наличия суммы.
         if code == "USD":
             after = usd_after = usd_before
-        portfolio.add_currency(code).balance = after
-        portfolio.add_currency("USD").balance = usd_after
+        else:
+            if buying:
+                portfolio.get_wallet("USD").withdraw(total)
+                portfolio.add_currency(code).deposit(amount)
+            else:
+                portfolio.get_wallet(code).withdraw(amount)
+                portfolio.add_currency("USD").deposit(total)
         self._save_portfolio(portfolio, records)
         return TradeResult(
             code, amount, quote, before, after, usd_before, usd_after, total

@@ -27,6 +27,19 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+[tool.valutatrade]
+DATA_DIR = "data"
+USERS_FILE = "users.json"
+PORTFOLIOS_FILE = "portfolios.json"
+RATES_FILE = "rates.json"
+RATES_TTL_SECONDS = 300
+DEFAULT_BASE_CURRENCY = "USD"
+LOG_FILE = "logs/actions.log"
+LOG_FORMAT = "json"
+LOG_LEVEL = "INFO"
+LOG_MAX_BYTES = 1048576
+LOG_BACKUP_COUNT = 3
+
 [dependency-groups]
 dev = [
     "ruff>=0.17.0",

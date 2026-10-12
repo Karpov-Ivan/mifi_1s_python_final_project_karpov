@@ -6,18 +6,39 @@ import tempfile
 from pathlib import Path
 
 from valutatrade_hub.core.exceptions import DataStorageError
-from valutatrade_hub.infra.settings import Settings
+from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class DatabaseManager:
-    """Читать и сохранять пользователей, портфели и курсы."""
+    """Единственная точка чтения и сохранения JSON-данных приложения."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
-        self.settings = settings or Settings()
+    _instance = None
+
+    def __new__(cls):
+        # __new__ явно обеспечивает единственный экземпляр без метакласса.
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self) -> None:
+        if getattr(self, "_initialized", False):
+            return
+        self.settings = SettingsLoader()
+        self._initialized = True
+
+    def _path(self, name: str) -> Path:
+        key = {
+            "users": "USERS_FILE",
+            "portfolios": "PORTFOLIOS_FILE",
+            "rates": "RATES_FILE",
+        }
+        if name not in key:
+            raise DataStorageError(f"Неизвестное хранилище '{name}'")
+        return self.settings.get(key[name])
 
     def read(self, name: str) -> list | dict:
         """Прочитать файл; отсутствующий файл соответствует пустому хранилищу."""
-        path = self.settings.data_dir / f"{name}.json"
+        path = self._path(name)
         expected_type = dict if name == "rates" else list
         try:
             if not path.exists():
@@ -31,7 +52,7 @@ class DatabaseManager:
 
     def write(self, name: str, data: list | dict) -> None:
         """Записать JSON через временный файл и os.replace."""
-        path = self.settings.data_dir / f"{name}.json"
+        path = self._path(name)
         temporary: Path | None = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

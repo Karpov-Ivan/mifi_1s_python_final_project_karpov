@@ -6,9 +6,9 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from valutatrade_hub.core.currencies import get_currency
 from valutatrade_hub.core.exceptions import (
     ApiRequestError,
-    CurrencyNotFoundError,
     DataStorageError,
     ValidationError,
 )
@@ -36,13 +36,8 @@ def hash_password(password: str, salt: str) -> str:
 
 
 def validate_currency(currency_code: str) -> str:
-    """Нормализовать код валюты и проверить его формат."""
-    if not isinstance(currency_code, str):
-        raise ValidationError("Код валюты должен быть непустой строкой из букв")
-    code = currency_code.strip().upper()
-    if not re.fullmatch(r"[A-Z]+", code):
-        raise ValidationError("Код валюты должен быть непустой строкой из букв")
-    return code
+    """Получить нормализованный код поддерживаемой валюты из реестра."""
+    return get_currency(currency_code).code
 
 
 def validate_number(value: float, *, positive: bool = True) -> float:
@@ -101,27 +96,19 @@ class RateService:
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             raise DataStorageError(f"Некорректная запись курса {pair}") from exc
         age = (now - updated_at).total_seconds()
-        if 0 <= age < self.database.settings.rates_ttl:
+        if 0 <= age < self.database.settings.get("RATES_TTL_SECONDS"):
             return RateQuote(rate, updated_at, source)
         return None
 
-    def ensure_currency(self, code: str, cache: dict | None = None) -> str:
-        """Проверить наличие валюты в заглушке или локальном кэше."""
-        code = validate_currency(code)
-        cache = self.database.read("rates") if cache is None else cache
-        known = set(STUB_USD_RATES)
-        for pair in cache:
-            if re.fullmatch(r"[A-Z]+_[A-Z]+", pair):
-                known.update(pair.split("_"))
-        if code not in known:
-            raise CurrencyNotFoundError(f"Неизвестная валюта '{code}'")
-        return code
+    def ensure_currency(self, code: str) -> str:
+        """Проверить валюту через фабрику get_currency()."""
+        return validate_currency(code)
 
     def get_rate(self, from_currency: str, to_currency: str) -> RateQuote:
         """Вернуть прямой, обратный или кросс-курс с учётом TTL."""
+        origin = self.ensure_currency(from_currency)
+        target = self.ensure_currency(to_currency)
         cache = self.database.read("rates")
-        origin = self.ensure_currency(from_currency, cache)
-        target = self.ensure_currency(to_currency, cache)
         now = datetime.now(UTC)
         if origin == target:
             return RateQuote(1.0, now, "Identity")
@@ -149,11 +136,13 @@ class RateService:
                         reverse.source,
                     )
             if quote is None:
-                if code not in STUB_USD_RATES:
+                try:
+                    stub_rate = validate_number(STUB_USD_RATES[code])
+                except (KeyError, ValidationError) as exc:
                     raise ApiRequestError(
-                        f"Курс {origin}→{target} недоступен. Повторите попытку позже."
-                    )
-                quote = RateQuote(STUB_USD_RATES[code], now, "Stub", refreshed=True)
+                        f"Курс {origin}→{target} недоступен в заглушке"
+                    ) from exc
+                quote = RateQuote(stub_rate, now, "Stub", refreshed=True)
                 pending[f"{code}_USD"] = {
                     "rate": quote.rate,
                     "updated_at": now.isoformat(),
