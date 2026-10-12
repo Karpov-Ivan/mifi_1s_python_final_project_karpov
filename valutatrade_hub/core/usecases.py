@@ -13,6 +13,7 @@ from valutatrade_hub.core.models import Portfolio, User
 from valutatrade_hub.core.utils import (
     RateQuote,
     RateService,
+    RatesView,
     validate_number,
     validate_username,
 )
@@ -20,6 +21,7 @@ from valutatrade_hub.decorators import log_action
 from valutatrade_hub.infra.database import DatabaseManager
 from valutatrade_hub.infra.settings import SettingsLoader
 from valutatrade_hub.logging_config import setup_logging
+from valutatrade_hub.parser_service.updater import UpdateResult, create_updater
 
 
 @dataclass(frozen=True)
@@ -199,3 +201,16 @@ class CoreService:
     def get_rate(self, from_currency: str, to_currency: str) -> RateQuote:
         """Получить курс без требования входа пользователя."""
         return self.rates.get_rate(from_currency, to_currency)
+
+    def update_rates(self, source: str | None = None) -> UpdateResult:
+        """Обновить кэш и историю через выбранные API-клиенты."""
+        return create_updater(source).run_update()
+
+    def show_rates(
+        self,
+        currency: str | None = None,
+        top: int | None = None,
+        base: str | None = None,
+    ) -> RatesView:
+        """Получить отфильтрованный список курсов для консольной таблицы."""
+        return self.rates.show_rates(currency, top, base)

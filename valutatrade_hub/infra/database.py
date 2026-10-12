@@ -31,6 +31,7 @@ class DatabaseManager:
             "users": "USERS_FILE",
             "portfolios": "PORTFOLIOS_FILE",
             "rates": "RATES_FILE",
+            "history": "HISTORY_FILE",
         }
         if name not in key:
             raise DataStorageError(f"Неизвестное хранилище '{name}'")
@@ -40,6 +41,10 @@ class DatabaseManager:
         """Прочитать файл; отсутствующий файл соответствует пустому хранилищу."""
         path = self._path(name)
         expected_type = dict if name == "rates" else list
+        return self.read_file(path, expected_type)
+
+    def read_file(self, path: Path, expected_type: type) -> list | dict:
+        """Прочитать JSON заданного типа из указанного файла."""
         try:
             if not path.exists():
                 return expected_type()
@@ -53,6 +58,10 @@ class DatabaseManager:
     def write(self, name: str, data: list | dict) -> None:
         """Записать JSON через временный файл и os.replace."""
         path = self._path(name)
+        self.write_file(path, data)
+
+    def write_file(self, path: Path, data: list | dict) -> None:
+        """Атомарно сохранить JSON по указанному пути."""
         temporary: Path | None = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

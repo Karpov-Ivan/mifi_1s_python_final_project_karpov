@@ -17,17 +17,17 @@ class JsonFormatter(logging.Formatter):
         data = {
             "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(),
             "level": record.levelname,
-            **record.action_data,
+            **getattr(record, "action_data", {"message": record.getMessage()}),
         }
         return json.dumps(data, ensure_ascii=False, default=str, allow_nan=False)
 
 
-def setup_logging() -> logging.Logger:
-    """Настроить единственный обработчик логов действий приложения."""
+def setup_logging(kind: str = "actions") -> logging.Logger:
+    """Настроить единственный обработчик действий или Parser Service."""
     settings = SettingsLoader()
-    logger = logging.getLogger("valutatrade.actions")
+    logger = logging.getLogger(f"valutatrade.{kind}")
     if not logger.handlers:
-        path = settings.get("LOG_FILE")
+        path = settings.get("PARSER_LOG_FILE" if kind == "parser" else "LOG_FILE")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             handler = RotatingFileHandler(

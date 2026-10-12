@@ -15,7 +15,8 @@ from valutatrade_hub.core.exceptions import (
     ValutaTradeError,
 )
 from valutatrade_hub.core.usecases import CoreService, PortfolioView, TradeResult
-from valutatrade_hub.core.utils import RateQuote
+from valutatrade_hub.core.utils import RatesView
+from valutatrade_hub.parser_service.updater import UpdateResult
 
 
 class HelpRequested(Exception):
@@ -53,6 +54,12 @@ def build_parser() -> CommandParser:
     rates = commands.add_parser("get-rate", help="Курс одной валюты к другой")
     rates.add_argument("--from", dest="from_currency", required=True)
     rates.add_argument("--to", dest="to_currency", required=True)
+    update = commands.add_parser("update-rates", help="Обновить курсы из API")
+    update.add_argument("--source", choices=("coingecko", "exchangerate"))
+    show = commands.add_parser("show-rates", help="Показать курсы из локального кэша")
+    show.add_argument("--currency")
+    show.add_argument("--top", type=int)
+    show.add_argument("--base")
     commands.add_parser("help", help="Справка")
     commands.add_parser("exit", help="Завершить сессию")
     return parser
@@ -67,11 +74,39 @@ class CommandInterface:
         self.running = True
 
     @staticmethod
-    def _source_notice(quote: RateQuote) -> None:
-        if "Stub" in quote.source:
-            print("Источник: учебная заглушка, не рыночные курсы.")
-        if quote.refreshed:
-            print("Кэш отсутствовал или устарел; курс обновлён из заглушки.")
+    def _show_rates(view: RatesView) -> None:
+        print(f"Курсы из кэша (обновление: {view.last_refresh}):")
+        table = PrettyTable(["Пара", "Курс", "Обновлено", "Источник", "Статус"])
+        for pair, quote, fresh in view.rows:
+            table.add_row(
+                [
+                    pair,
+                    f"{quote.rate:.8f}",
+                    quote.updated_at.isoformat(),
+                    quote.source,
+                    "актуален" if fresh else "устарел",
+                ]
+            )
+        print(table)
+        if any(not fresh for _, _, fresh in view.rows):
+            print("В кэше есть устаревшие курсы. Выполните 'update-rates'.")
+
+    @staticmethod
+    def _show_update(result: UpdateResult) -> None:
+        for source, count in result.fetched.items():
+            print(f"{source}: получено курсов — {count}")
+        for source, message in result.errors.items():
+            print(f"{source}: {message}")
+        status = (
+            "Обновление завершено с ошибками"
+            if result.errors
+            else "Обновление выполнено"
+        )
+        print(
+            f"{status}. Обновлено пар: {result.updated}. Время: {result.last_refresh}"
+        )
+        if result.errors:
+            print("Подробности: logs/parser.log")
 
     @staticmethod
     def _show_portfolio(view: PortfolioView) -> None:
@@ -84,8 +119,6 @@ class CommandInterface:
             table.add_row([code, f"{balance:.4f}", f"{value:,.2f}"])
         print(table)
         print(f"ИТОГО: {view.total:,.2f} {view.base}")
-        if any("Stub" in source for source in view.sources):
-            print("Оценка использует учебную заглушку курсов.")
 
     def _show_trade(self, result: TradeResult, *, buying: bool) -> None:
         action = "Покупка" if buying else "Продажа"
@@ -102,7 +135,6 @@ class CommandInterface:
             print(f"- USD: было {result.usd_before:.4f} → стало {result.usd_after:.4f}")
         label = "Оценочная стоимость покупки" if buying else "Оценочная выручка"
         print(f"{label}: {result.total:,.2f} USD")
-        self._source_notice(result.quote)
 
     def execute(self, command: str | list[str]) -> bool:
         """Выполнить одну команду и сообщить, была ли она успешной."""
@@ -144,7 +176,13 @@ class CommandInterface:
                         f"(обновлено: {quote.updated_at.isoformat()})"
                     )
                     print(f"Обратный курс {target}→{origin}: {1 / quote.rate:.8f}")
-                    self._source_notice(quote)
+                    print(f"Источник: {quote.source}")
+                case "update-rates":
+                    self._show_update(self.service.update_rates(args.source))
+                case "show-rates":
+                    self._show_rates(
+                        self.service.show_rates(args.currency, args.top, args.base)
+                    )
                 case "help":
                     self.parser.print_help()
                 case "exit":

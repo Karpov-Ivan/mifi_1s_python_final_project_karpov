@@ -7,6 +7,7 @@ authors = [{name = "Карпов Иван"}]
 requires-python = ">=3.12"
 dependencies = [
     "prettytable>=3.18.0",
+    "requests>=2.34.2",
 ]
 
 [project.scripts]
@@ -32,9 +33,11 @@ DATA_DIR = "data"
 USERS_FILE = "users.json"
 PORTFOLIOS_FILE = "portfolios.json"
 RATES_FILE = "rates.json"
+HISTORY_FILE = "exchange_rates.json"
 RATES_TTL_SECONDS = 300
 DEFAULT_BASE_CURRENCY = "USD"
 LOG_FILE = "logs/actions.log"
+PARSER_LOG_FILE = "logs/parser.log"
 LOG_FORMAT = "json"
 LOG_LEVEL = "INFO"
 LOG_MAX_BYTES = 1048576
