@@ -1,4 +1,4 @@
-"""Запуск приложения через python -m valutatrade_hub."""
+"""Запуск ValutaTrade Hub из корня проекта."""
 
 from valutatrade_hub.cli.interface import main
 
