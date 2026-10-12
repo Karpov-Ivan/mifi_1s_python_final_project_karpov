@@ -1,0 +1,33 @@
+[project]
+name = "mifi_1s_python_final_project_karpov"
+version = "0.1.0"
+description = "Учебное консольное приложение ValutaTrade Hub для работы с валютным кошельком"
+readme = "README.md"
+authors = [{name = "Карпов Иван"}]
+requires-python = ">=3.12"
+dependencies = [
+    "prettytable>=3.18.0",
+]
+
+[project.scripts]
+valutatrade = "valutatrade_hub.cli.interface:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "valutatrade_hub"
+module-root = ""
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.17.0",
+]
